@@ -1,11 +1,1 @@
-## comment
-## wrongcomment
-key34 := VII + II ## master key 34s
-for (i := VI; i < XX; i := i +VI / XVI * II) do
-done
-qw = _ee34
-#*
-	fe comment
-	a := a30
-*#
-
+for (i := VI; i < XX; i := i +VI / XVI * II) do pid := IV done
