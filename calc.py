@@ -1,4 +1,4 @@
-import sys, random
+import sys, random, re
 
 if sys.version_info[0] >= 3:
 	raw_input = input
@@ -30,8 +30,6 @@ t_RPAREN	= r'\)'
 t_INEQUALITY   = r'[<\=\>]'
 t_SEPARATOR  = r'\;'
 t_ASSIGN  = r'\:='
-t_ROMAN= r'[VIX][VIX]*'
-
 literals = "+-*/"
 
 
@@ -41,7 +39,10 @@ def t_COMMENT(t):
 
 def t_IDENTIFIER(t):
 	r'[a-zA-Z_][a-zA-Z0-9_]*'
-	t.type = reserved.get(t.value.lower(),'IDENTIFIER')
+	if re.match(r'[VIX][VIX]*',t.value):
+		t.type = reserved.get(t.value.lower(),'ROMAN')
+	else:
+		t.type = reserved.get(t.value.lower(),'IDENTIFIER')
 	return t
 
 t_ignore = " \t"
@@ -78,6 +79,8 @@ print lines
 # Parsing rules
 
 precedence = (
+	('left','ASSIGN'),
+	('left','INEQUALITY'),
 	('left','-','+'),
 	('left','*','/'),
 	)
@@ -125,32 +128,74 @@ yacc.yacc()
 
 #exit()
 
-res = yacc.parse(lines)
-print res.token
-print res.left.token
-print res.right.token
-print res.third.token
-print res.four.token
+import subprocess
 
-def getItem(fileH, parent, array, level):
-	level += 1
-	if array.token == 'binary-expression':
+res = yacc.parse(lines)
+
+print res.token
+
+
+def getItem(fileH, parent, array):
+	print array.token
+	if array.token == 'for-expression':
+		fileH.write("\t{} [label=\"FOR\"]\n".format(array.name))
+		if parent != "start":
+			fileH.write("\t{} -> {}\n".format(parent, array.name))
+		getItem(fileH, array.name, array.left)
+		getItem(fileH, array.name, array.right)
+		getItem(fileH, array.name, array.third)
+		getItem(fileH, array.name, array.four)
+	elif array.token == 'binary-expression':
 		fileH.write("\t{} [label=\"Bin:{}\"]\n".format(array.name,array.op))
 		if parent != "start":
 			fileH.write("\t{} -> {}\n".format(parent, array.name))
 		#~ print array.left,array.right
-		getItem(fileH, array.name, array.left, level)
-		getItem(fileH, array.name, array.right , level)
-	elif array.token == 'number-expression':
-		fileH.write("\t{} [label=\"Number:{}\"]\n".format(array.name,array.left))
+		getItem(fileH, array.name, array.left)
+		getItem(fileH, array.name, array.right)
+	elif array.token == 'assign-expression':
+		fileH.write("\t{} [label=\"Assing\"]\n".format(array.name))
+		if parent != "start":
+			fileH.write("\t{} -> {}\n".format(parent, array.name))
+		#~ print array.left,array.right
+		getItem(fileH, array.name, array.left)
+		getItem(fileH, array.name, array.right)
+	elif array.token == 'INEQUALITY-expression':
+		fileH.write("\t{} [label=\"INEQUAL:{}\"]\n".format(array.name,array.op))
+		if parent != "start":
+			fileH.write("\t{} -> {}\n".format(parent, array.name))
+		#~ print array.left,array.right
+		getItem(fileH, array.name, array.left)
+		getItem(fileH, array.name, array.right)
+	elif array.token == 'roman-expression':
+		fileH.write("\t{} [label=\"roman:{}\"]\n".format(array.name,array.left))
+		if parent != "start":
+			fileH.write("\t{} -> {}\n".format(parent, array.name))
+	elif array.token == 'id-expression':
+		fileH.write("\t{} [label=\"id:{}\"]\n".format(array.name,array.left))
 		if parent != "start":
 			fileH.write("\t{} -> {}\n".format(parent, array.name))
 	elif array.token == 'group-expression':
 		fileH.write("\t{} [label=\"Group\"]\n".format(array.name))
 		if parent != "start":
 			fileH.write("\t{} -> {}\n".format(parent, array.name))
-		getItem(fileH, array.name, array.left, level)
-#dot -Tjpg -o file.jpg graph.gv
+		getItem(fileH, array.name, array.left)
+
+
+
+
+fileH = open("graph.gv", 'w')
+
+fileH.write("digraph G {\n")
+getItem(fileH, "start", res)
+fileH.write("}\n")
+fileH.close()
+
+
+fileN = open("file.jpg", 'w')
+subprocess.call(["/usr/bin/dot", "-Tjpg", "/home/progga/compiler/graph.gv"],shell=False, stdout=fileN)
+fileN.close()
+subprocess.call(["/usr/bin/gnome-open","/home/progga/compiler/file.jpg"])
+
 """
 #	fileH = open("graph.gv", 'w')
 #	fileH.write("digraph G {\n")

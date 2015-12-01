@@ -1,1 +1,1 @@
-for (i := VI; i < XX; i := i +VI / XVI * II) do pid := IV done
+for (i := VI; i + X < XX; i := (i +VI) / XVI * II) do pid := EE > IV done
