@@ -1,1 +1,9 @@
-for (i := VI; i + X < XX; i := (i +VI) / XVI * II) do pid := EE > IV done
+VAR1 := I;
+VAR2 := VAR1 * (I + VAR1);
+for (i := VI; i + X < XX; i := (i +VI) / XVI * II) do
+	pid := EE > IV;
+	for (j := 0; j < X; j := j + I) do
+		pid := j * II;
+	done;
+	Hello := j;
+done

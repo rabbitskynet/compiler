@@ -1,6 +1,3 @@
-## comment
-## wrongcomment
-key12 := VII + II ## master key 45s
-for (i := VI; i < XX; i := i +VI / XVI * II) do
+for (i := 0; i + X < XX; i := (i +VI) / XVI * II) do
+	VAR1 := I * i;
 done
-qw = _ee34
