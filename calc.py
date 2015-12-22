@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import sys, random, re
 
 if sys.version_info[0] >= 3:
@@ -60,7 +61,7 @@ def t_error(t):
 # Build the lexer
 import ply.lex as lex
 lex.lex()
-lines = ' '.join([line.rstrip('\n') for line in open('code.txt_old')])
+lines = ' '.join([line.rstrip('\n') for line in open('code2.txt')])
 print lines
 
 
@@ -74,12 +75,11 @@ precedence = (
 	)
 
 
-def p_expression_less(p):
-	'expression : expression INEQUALITY expression'
-	p[0] = Node('INEQUALITY-expression',p[2], [p[1],p[3]])
-
 def p_expression_multy(p):
-	'expression : expression SEPARATOR expression'
+	'''expression : expression SEPARATOR expression
+				  | expression SEPARATOR Assexpression
+				  | Assexpression SEPARATOR expression
+				  | Assexpression SEPARATOR Assexpression'''
 	if isinstance(p[1],Node):
 		if p[1].token == 'ORDER-expression':
 			p[1].array.append(p[3])
@@ -96,7 +96,6 @@ def p_expression_endexp(p):
 	'expression : expression SEPARATOR'
 	p[0] = p[1]
 
-
 def p_expression_binop(p):
 	'''expression : expression '+' expression
 				  | expression '-' expression
@@ -105,7 +104,7 @@ def p_expression_binop(p):
 	p[0] = Node('binary-expression',p[2],[p[1],p[3]])
 
 def p_expression_for(p):
-	'expression : FOR LPAREN expression SEPARATOR expression SEPARATOR expression RPAREN DO expression DONE'
+	'expression : FOR LPAREN Assexpression SEPARATOR InequalityExp SEPARATOR Assexpression RPAREN DO expression DONE'
 	p[0] = Node('for-expression','for',[p[3],p[5],p[7],p[10]])
 
 def p_expression_group(p):
@@ -114,26 +113,35 @@ def p_expression_group(p):
 	p[0] = p[2]
 
 def p_expression_assign(p):
-	'expression : expression ASSIGN expression'
+	'''Assexpression : expression ASSIGN expression
+				     | expression ASSIGN InequalityExp'''
 	p[0] = Node('assign-expression',p[2],[p[1],p[3]])
 
-def p_expression_roman(p):
-	'expression : ROMAN'
-	p[0] = Node('roman-expression','XX', [p[1]])
+def p_expression_less(p):
+	'InequalityExp : expression INEQUALITY expression'
+	p[0] = Node('INEQUALITY-expression',p[2], [p[1],p[3]])
+
 
 def p_expression_id(p):
 	'expression : IDENTIFIER'
 	p[0] = Node('id-expression','id',[p[1]])
 
+
+def p_expression_roman(p):
+	'expression : ROMAN'
+	p[0] = Node('roman-expression','XX', [p[1]])
+
+
 def p_error(p):
 	if p:
 		print("Syntax error at '%s'" % p.value)
+		exit()
 	else:
 		print("Syntax error at EOF")
+		exit()
 
 import ply.yacc as yacc
 yacc.yacc()
-
 
 
 
@@ -149,6 +157,8 @@ def WriteParentLine(fileH, parent, onenode, orderid = None):
 			fileH.write("\t{} -> {}\n".format(parent, onenode.name))
 
 #~ exit()
+
+
 def getItem(fileH, parent, onenode, orderid = None):
 	if onenode.token == 'for-expression':
 		fileH.write("\t{} [label=\"FOR\"]\n".format(onenode.name))
@@ -182,14 +192,177 @@ def getItem(fileH, parent, onenode, orderid = None):
 		fileH.write("\t{} [label=\"id: {}\"]\n".format(onenode.name,onenode.array[0]))
 		WriteParentLine(fileH, parent, onenode, orderid)
 
+registers = [ 'D', 'E', 'H', 'L']
+lastRegister = 0
+def getNextRegister():
+	global lastRegister
+	ret = ""
+	if lastRegister < len(registers):
+		ret = registers[lastRegister]
+		lastRegister+=1
+	else:
+		ret = registers[0]
+		lastRegister=1
+	return ret	
+
+
+Names = {}
+TotalCode={}
+
+def getType(item, ret):
+	if item is not None:
+		if "value" in item:
+			if re.match(r'^[MDCLXVI]+$',item['value']) or item['value'] == "nulla":
+				return item['value']
+			else:
+				if item['value'] in Names.keys():
+					return Names[item['value']]
+		elif "code" in item:
+			return ret
+		elif "group" in item:
+			return ret
+	print "getType: none"
+	return ret
+
+
+
+def GetCode(onenode):
+	global Names
+	if onenode.token == 'for-expression':
+		print "Node: FOR cycle"
+		
+		setvar = GetCode(onenode.array[0])
+		checkvar = GetCode(onenode.array[1])
+		blockvar = GetCode(onenode.array[3])
+		incvar = GetCode(onenode.array[2])
+		res=[]
+		for key in setvar.keys():
+			if key not in ('value', 'variable'):
+				res +=setvar[key]
+		mainvar = setvar['variable']
+		print checkvar
+		for key in checkvar.keys():
+			if key not in ('value', 'variable'):
+				res +=checkvar[key]
+		for key in blockvar.keys():
+			if key not in ('value', 'variable'):
+				res +=blockvar[key]
+		for key in incvar.keys():
+			if key not in ('value', 'variable'):
+				res +=incvar[key]
+		return {'code': res }
+	elif onenode.token == 'binary-expression':
+		print "Node: binary"
+		right = GetCode(onenode.array[1])
+		left = GetCode(onenode.array[0])
+		res=[]
+		#old#~ print ("!mov Ax = "+ tmparr[0] if getType(tmparr[0]) else "C")
+		#~ print left,onenode.op,right
+		
+		#~ print getType(left),onenode.op,getType(right)
+		#~ print ("!mov Ax = "+ getType(left) if getType(left) else "C")
+		for key in right.keys():
+			if key not in ('value', 'variable'):
+				res +=right[key]
+		for key in left.keys():
+			if key not in ('value', 'variable'):
+				res +=left[key]
+		
+		res += ["!mov Ax = "+ getType(left,"C")]
+		#~ print ["!mov Ax = "+ getType(left,"C")]
+		op = None
+		if onenode.op == "+":
+			op = "add"
+		elif onenode.op == "-":
+			op = "sub"
+		elif onenode.op == "*":
+			op = "mul"
+		else:
+			op = "div"
+		#print "!"+op+" Ax," +  getType(right) if getType(right) else "D"
+		res += ["!"+op+" Ax," +  getType(right,"C")]
+		#~ print ["!"+op+" Ax," +  getType(right,"C")]
+		#print "!mov C, Ax"
+		res += ["!mov C, Ax"]
+		#~ print "!mov C, Ax"
+		return {'code': res }
+	elif onenode.token == 'assign-expression':
+		print "Node: assign"
+		right = GetCode(onenode.array[1])
+		left = GetCode(onenode.array[0])
+		res=[]
+		for key in right:
+			if key not in ('value', 'variable'):
+				res +=right[key]
+		for key in left:
+			if key not in ('value', 'variable'):
+				res +=left[key]
+			
+		res += ["!mov Ax, "+ getType(right,"C")]
+		res += ["!mov "+ getType(left,"C")+ " Ax"]
+		return {'code': res, 'variable': getType(left,"C") }
+	elif onenode.token == 'INEQUALITY-expression':
+		print "Node: inequality"
+		right = GetCode(onenode.array[1])
+		left = GetCode(onenode.array[0])
+		res=[]
+		for key in right:
+			if key not in ('value', 'variable'):
+				res +=right[key]
+		for key in left:
+			if key not in ('value', 'variable'):
+				res +=left[key]
+			
+		res += ["!mov Ax, "+ getType(right,"C")]
+		res += ["!mov "+ getType(left,"C")+ " Ax"]
+		return {'code': res, 'variable': getType(left,"C") }
+		
+		
+		left = GetCode(onenode.array[0])
+		right = GetCode(onenode.array[1])
+		return [left]+[right]
+	elif onenode.token == 'ORDER-expression':
+		print "Node: order"
+		res = []
+		for item in onenode.array:
+			left = GetCode(item)
+			for key in left:
+				if key not in ('value', 'variable'):
+					res +=left[key]
+			res +=["!NOP"]
+		#~ print "LEFT", left
+		#~ print "RIGHT",right
+		res = res[:-1]
+		return {'group': res}
+	elif onenode.token == 'roman-expression':
+		print "Node: roman"
+		print [onenode.array[0]]
+		return {'value': onenode.array[0]}
+	elif onenode.token == 'id-expression':
+		print "Node: id"
+		if onenode.array[0] not in Names:
+			Names[onenode.array[0]] = getNextRegister()
+			print "Node [{}] will reserve in {}".format(onenode.array[0], Names[onenode.array[0]])
+			print [onenode.array[0]]
+		return {'value': onenode.array[0]}	
+
+
 
 fileH = open("graph.gv", 'w')
-
+print
 fileH.write("digraph G {\n")
 getItem(fileH, "start", res)
+for key in GetCode(res):
+	for line in GetCode(res)[key]:
+		print line
 fileH.write("}\n")
 fileH.close()
 
+
+#~ VAR1 := I+ V * II ; VAR2 := VAR1 - VX ; VAR3 := VAR1 + VAR2;
+#~ for ( i := I; i < X ; i := i+I) do
+	#~ VSC := VSC + i;
+#~ done
 
 fileN = open("file.jpg", 'w')
 subprocess.call(["/usr/bin/dot", "-Tjpg", "graph.gv"],shell=False, stdout=fileN)

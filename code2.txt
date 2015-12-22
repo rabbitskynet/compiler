@@ -1,0 +1,1 @@
+VAR1 := I+ V * II ; VAR2 := VAR1 > VX ; VAR3 := VAR1 + VAR2
