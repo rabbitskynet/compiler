@@ -1,1 +1,5 @@
-VAR1 := I+ V * II ; VAR2 := VAR1 > VX ; VAR3 := VAR1 + VAR2
+for ( i := I; i < X ; i := i+I) do
+	for ( Z := I; Z < V ; Z := Z + V) do
+		VSC := VSC + i;
+	done;
+done

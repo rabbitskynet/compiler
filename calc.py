@@ -93,7 +93,8 @@ def p_expression_multy(p):
 		p[0] = Node('ORDER-expression',p[2],[p[1],p[3]])
 
 def p_expression_endexp(p):
-	'expression : expression SEPARATOR'
+	'''expression : expression SEPARATOR
+				  | Assexpression SEPARATOR'''
 	p[0] = p[1]
 
 def p_expression_binop(p):
@@ -194,6 +195,8 @@ def getItem(fileH, parent, onenode, orderid = None):
 
 registers = [ 'D', 'E', 'H', 'L']
 lastRegister = 0
+lastifcondition = 0
+lastforcondition = 0
 def getNextRegister():
 	global lastRegister
 	ret = ""
@@ -226,50 +229,57 @@ def getType(item, ret):
 
 
 
+def removeSpec(key):
+	listy = ('value', 'variable', 'exitlabel')
+	return key not in listy
+
 def GetCode(onenode):
+	global lastifcondition,lastforcondition 
 	global Names
 	if onenode.token == 'for-expression':
-		print "Node: FOR cycle"
-		
+		#~ print "Node: FOR cycle"
+		forlabel = "ifcondition_{:03d}".format(lastforcondition)
+
+		lastforcondition+=1
 		setvar = GetCode(onenode.array[0])
-		checkvar = GetCode(onenode.array[1])
-		blockvar = GetCode(onenode.array[3])
-		incvar = GetCode(onenode.array[2])
 		res=[]
 		for key in setvar.keys():
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=setvar[key]
-		mainvar = setvar['variable']
-		print checkvar
+		res += [forlabel+":"]
+		checkvar = GetCode(onenode.array[1])
 		for key in checkvar.keys():
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=checkvar[key]
+		blockvar = GetCode(onenode.array[3])
 		for key in blockvar.keys():
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=blockvar[key]
+		incvar = GetCode(onenode.array[2])
 		for key in incvar.keys():
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=incvar[key]
+		res += ["JMP "+forlabel]
+		res += [checkvar['exitlabel']+":"]
 		return {'code': res }
 	elif onenode.token == 'binary-expression':
-		print "Node: binary"
+		#~ print "Node: binary"
 		right = GetCode(onenode.array[1])
 		left = GetCode(onenode.array[0])
 		res=[]
-		#old#~ print ("!mov Ax = "+ tmparr[0] if getType(tmparr[0]) else "C")
+		#old#~ print ("mov Ax = "+ tmparr[0] if getType(tmparr[0]) else "C")
 		#~ print left,onenode.op,right
 		
 		#~ print getType(left),onenode.op,getType(right)
-		#~ print ("!mov Ax = "+ getType(left) if getType(left) else "C")
+		#~ print ("mov Ax = "+ getType(left) if getType(left) else "C")
 		for key in right.keys():
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=right[key]
 		for key in left.keys():
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=left[key]
-		
-		res += ["!mov Ax = "+ getType(left,"C")]
-		#~ print ["!mov Ax = "+ getType(left,"C")]
+		res += ["mov Ax = "+ getType(left,"C")]
+		#~ print ["mov Ax = "+ getType(left,"C")]
 		op = None
 		if onenode.op == "+":
 			op = "add"
@@ -279,71 +289,79 @@ def GetCode(onenode):
 			op = "mul"
 		else:
 			op = "div"
-		#print "!"+op+" Ax," +  getType(right) if getType(right) else "D"
-		res += ["!"+op+" Ax," +  getType(right,"C")]
-		#~ print ["!"+op+" Ax," +  getType(right,"C")]
-		#print "!mov C, Ax"
-		res += ["!mov C, Ax"]
-		#~ print "!mov C, Ax"
+		#print ""+op+" Ax," +  getType(right) if getType(right) else "D"
+		res += [""+op+" Ax," +  getType(right,"C")]
+		#~ print [""+op+" Ax," +  getType(right,"C")]
+		#print "mov C, Ax"
+		res += ["mov C, Ax"]
+		#~ print "mov C, Ax"
 		return {'code': res }
 	elif onenode.token == 'assign-expression':
-		print "Node: assign"
+		#~ print "Node: assign"
 		right = GetCode(onenode.array[1])
 		left = GetCode(onenode.array[0])
 		res=[]
 		for key in right:
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=right[key]
 		for key in left:
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=left[key]
 			
-		res += ["!mov Ax, "+ getType(right,"C")]
-		res += ["!mov "+ getType(left,"C")+ " Ax"]
+		res += ["mov Ax, "+ getType(right,"C")]
+		res += ["mov "+ getType(left,"C")+ ", Ax"]
 		return {'code': res, 'variable': getType(left,"C") }
 	elif onenode.token == 'INEQUALITY-expression':
-		print "Node: inequality"
+		#~ print "Node: inequality"
 		right = GetCode(onenode.array[1])
 		left = GetCode(onenode.array[0])
 		res=[]
 		for key in right:
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=right[key]
 		for key in left:
-			if key not in ('value', 'variable'):
+			if removeSpec(key):
 				res +=left[key]
-			
-		res += ["!mov Ax, "+ getType(right,"C")]
-		res += ["!mov "+ getType(left,"C")+ " Ax"]
-		return {'code': res, 'variable': getType(left,"C") }
+		res += ["mov Ax, "+getType(left,"C")]
+		res += ["cmp Ax, "+getType(right,"C")]
+		label = "exitcondition_{:03d}".format(lastifcondition)
+		lastifcondition +=1
+		if onenode.op == "==":
+			res += ["JNE "+label]
+		elif onenode.op == "<":
+			res += ["JNL "+label]
+		elif onenode.op == "<=":
+			res += ["JNLE "+label]
+		elif onenode.op == ">":
+			res += ["JNG "+label]
+		elif onenode.op == ">=":
+			res += ["JNGE "+label]		
+		return {'code': res, 'exitlabel': label }
 		
-		
-		left = GetCode(onenode.array[0])
-		right = GetCode(onenode.array[1])
-		return [left]+[right]
+
 	elif onenode.token == 'ORDER-expression':
-		print "Node: order"
+		#~ print "Node: order"
 		res = []
 		for item in onenode.array:
 			left = GetCode(item)
 			for key in left:
-				if key not in ('value', 'variable'):
+				if removeSpec(key):
 					res +=left[key]
-			res +=["!NOP"]
+			res +=["NOP"]
 		#~ print "LEFT", left
 		#~ print "RIGHT",right
 		res = res[:-1]
 		return {'group': res}
 	elif onenode.token == 'roman-expression':
-		print "Node: roman"
-		print [onenode.array[0]]
+		#Dprint "Node: roman"
+		#Dprint [onenode.array[0]]
 		return {'value': onenode.array[0]}
 	elif onenode.token == 'id-expression':
-		print "Node: id"
+		#Dprint "Node: id"
 		if onenode.array[0] not in Names:
 			Names[onenode.array[0]] = getNextRegister()
-			print "Node [{}] will reserve in {}".format(onenode.array[0], Names[onenode.array[0]])
-			print [onenode.array[0]]
+			#Dprint "Node [{}] will reserve in {}".format(onenode.array[0], Names[onenode.array[0]])
+			#Dprint [onenode.array[0]]
 		return {'value': onenode.array[0]}	
 
 
@@ -352,8 +370,9 @@ fileH = open("graph.gv", 'w')
 print
 fileH.write("digraph G {\n")
 getItem(fileH, "start", res)
-for key in GetCode(res):
-	for line in GetCode(res)[key]:
+res = GetCode(res)
+for key in res:
+	for line in res[key]:
 		print line
 fileH.write("}\n")
 fileH.close()
